@@ -1177,3 +1177,12 @@ body {
   font-size: 12px;
   text-align: right;
 }
+
+/* Sidebar navigation links should look like app navigation, not underlined web links. */
+.sidebar .mode-link,
+.sidebar .mode-link:visited,
+.sidebar .mode-link:hover,
+.sidebar .mode-link:focus,
+.sidebar .mode-link:active {
+  text-decoration: none;
+}
