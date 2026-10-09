@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: StudyBuddy - AI learning assistant with Amazon Bedrock and DynamoDB persistence
+
+Parameters:
+  ModelId:
+    Type: String
+    Default: amazon.nova-lite-v1:0
+    Description: Bedrock model ID available in your selected AWS Region.
+  AllowedOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Exact frontend origin allowed to call the API.
+
+Globals:
+  Function:
+    Timeout: 35
+    MemorySize: 256
+    Runtime: python3.12
+    Environment:
+      Variables:
+        MODEL_ID: !Ref ModelId
+        TABLE_NAME: !Ref StudyBuddyTable
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+
+Resources:
+  StudyBuddyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub studybuddy-${AWS::StackName}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  StudyBuddyApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowHeaders:
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - OPTIONS
+        MaxAge: 600
+
+  StudyBuddyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StudyBuddyTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${ModelId}
+      Events:
+        Chat:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StudyBuddyApi
+            Path: /chat
+            Method: POST
+        GetData:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StudyBuddyApi
+            Path: /data
+            Method: GET
+        SaveData:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StudyBuddyApi
+            Path: /data
+            Method: PUT
+
+Outputs:
+  ApiUrl:
+    Description: StudyBuddy API base URL
+    Value: !Sub https://${StudyBuddyApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  DynamoDBTableName:
+    Description: DynamoDB table storing StudyBuddy workspace data
+    Value: !Ref StudyBuddyTable
